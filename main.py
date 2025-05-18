@@ -1,7 +1,17 @@
 from fastapi import FastAPI, Request
 import requests
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or restrict to your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 GOOGLE_API_KEY = "AIzaSyBttID79kCG9XQP1MO-7a1OOqG-PfpqBiY"
 OCM_API_KEY = "d0fee2b1-2fa3-4725-ba42-d8073437d320"
