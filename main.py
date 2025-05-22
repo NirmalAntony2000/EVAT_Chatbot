@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-
+import re
 
 app = FastAPI()
 app.add_middleware(
@@ -46,6 +46,9 @@ def get_nearby_places(lat, lon, place_type="cafe"):
         "key": GOOGLE_API_KEY
     }
     return requests.get(url, params=params).json().get("results", [])[:3]
+
+def normalize(text):
+    return re.sub(r'[^a-z0-9]', '', text.lower())
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -95,9 +98,10 @@ async def webhook(request: Request):
         user_input = data['queryResult']['queryText'].strip()
         context = next((ctx for ctx in data['queryResult']['outputContexts'] if 'awaiting_selection' in ctx['name']), {})
         charger_list = context.get("parameters", {}).get("chargers", [])
+        user_input_norm = normalize(user_input)
+
         selected = next(
-            (c for c in charger_list if c["label"].strip().lower() in user_input.strip().lower() or
-             user_input.strip().lower() in c["label"].strip().lower()),
+            (c for c in charger_list if normalize(c["label"]) == user_input_norm),
             None
         )
 
