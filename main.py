@@ -101,7 +101,8 @@ async def webhook(request: Request):
         user_input_norm = normalize(user_input)
 
         selected = next(
-            (c for c in charger_list if normalize(c["label"]) == user_input_norm),
+    (c for c in charger_list if user_input_norm in normalize(c["label"]) or
+     normalize(c["label"]) in user_input_norm),
             None
         )
 
