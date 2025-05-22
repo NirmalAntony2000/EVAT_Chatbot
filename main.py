@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or restrict to your frontend domain
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -18,7 +18,6 @@ OCM_API_KEY = "d0fee2b1-2fa3-4725-ba42-d8073437d320"
 
 
 def get_coordinates(city):
-    # Append ", Victoria" to bias all searches to Victoria, AU
     city = f"{city.strip()}, Victoria"
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={city}&region=AU&key={GOOGLE_API_KEY}"
     response = requests.get(url).json()
