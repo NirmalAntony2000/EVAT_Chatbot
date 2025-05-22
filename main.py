@@ -6,26 +6,22 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 GOOGLE_API_KEY = "AIzaSyBttID79kCG9XQP1MO-7a1OOqG-PfpqBiY"
 OCM_API_KEY = "d0fee2b1-2fa3-4725-ba42-d8073437d320"
-
 
 def get_coordinates(city):
     city = f"{city.strip()}, Victoria"
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={city}&region=AU&key={GOOGLE_API_KEY}"
     response = requests.get(url).json()
-
     if response.get('status') == 'OK' and response.get('results'):
         loc = response['results'][0]['geometry']['location']
         return loc['lat'], loc['lng']
-
     return None, None
 
 def get_chargers(lat, lon):
@@ -97,13 +93,16 @@ async def webhook(request: Request):
 
     elif intent == "SelectCharger":
         user_input = data['queryResult']['queryText'].strip()
-        context = next((ctx for ctx in data['queryResult']['outputContexts']
-                        if 'awaiting_selection' in ctx['name']), {})
+        context = next((ctx for ctx in data['queryResult']['outputContexts'] if 'awaiting_selection' in ctx['name']), {})
         charger_list = context.get("parameters", {}).get("chargers", [])
-        selected = next((c for c in charger_list if c["label"].lower() == user_input.lower()), None)
+        selected = next(
+            (c for c in charger_list if c["label"].strip().lower() in user_input.strip().lower() or
+             user_input.strip().lower() in c["label"].strip().lower()),
+            None
+        )
 
         if not selected:
-            return {"fulfillmentText": "Sorry, that charger wasn't recognized."}
+            return {"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
 
         return {
             "fulfillmentText": "What would you like to see nearby? Cafés, restrooms, or convenience stores?",
@@ -124,8 +123,7 @@ async def webhook(request: Request):
 
     elif intent == "SelectAmenityType":
         amenity = params.get("amenity_type", "").strip()
-        context = next((ctx for ctx in data['queryResult']['outputContexts']
-                        if 'awaiting_amenity_type' in ctx['name']), {})
+        context = next((ctx for ctx in data['queryResult']['outputContexts'] if 'awaiting_amenity_type' in ctx['name']), {})
         selected = context.get("parameters", {}).get("selected", {})
         lat = selected.get("lat")
         lon = selected.get("lon")
