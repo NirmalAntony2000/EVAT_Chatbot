@@ -101,13 +101,51 @@ async def webhook(request: Request):
         user_input_norm = normalize(user_input)
 
         selected = next(
-    (c for c in charger_list if user_input_norm in normalize(c["label"]) or
-     normalize(c["label"]) in user_input_norm),
+            (c for c in charger_list if user_input_norm in normalize(c["label"]) or
+             normalize(c["label"]) in user_input_norm),
             None
         )
 
         if not selected:
             return {"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
+
+        lat = selected.get("lat")
+        lon = selected.get("lon")
+        label = selected.get("label")
+
+        nearby_chargers = get_chargers(lat, lon)
+        other_chargers = []
+        for c in nearby_chargers:
+            charger_label = f"{c['AddressInfo']['Title']} – {c['AddressInfo'].get('AddressLine1', 'Unknown')}"
+            if normalize(charger_label) != normalize(label):
+                other_chargers.append(charger_label)
+
+        response_text = f"You selected: {label}.
+Here are other chargers nearby:
+"
+        for other in other_chargers[:3]:
+            response_text += f"- {other}
+"
+
+        response_text += "
+Would you like to see nearby cafés, restrooms, or convenience stores?"
+
+        return {
+            "fulfillmentText": response_text,
+            "fulfillmentMessages": [{
+                "quickReplies": {
+                    "title": "Choose a place type:",
+                    "quickReplies": ["cafes", "restrooms", "convenience stores"]
+                }
+            }],
+            "outputContexts": [{
+                "name": f"{data['session']}/contexts/awaiting_amenity_type",
+                "lifespanCount": 5,
+                "parameters": {
+                    "selected": selected
+                }
+            }]
+        }"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
 
         return {
             "fulfillmentText": "What would you like to see nearby? Cafés, restrooms, or convenience stores?",
