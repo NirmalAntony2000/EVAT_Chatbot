@@ -1,6 +1,3 @@
-from pathlib import Path
-
-safe_main_py = '''
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
@@ -139,7 +136,7 @@ async def webhook(request: Request):
             lines.append("No other chargers were found nearby.")
         lines.append("")
         lines.append("Would you like to see nearby cafés, restrooms, or convenience stores?")
-        message = "\\n".join(lines)
+        message = "\n".join(lines)
 
         return {
             "fulfillmentText": message,
@@ -191,9 +188,3 @@ async def webhook(request: Request):
         return {"fulfillmentText": text}
 
     return {"fulfillmentText": "Sorry, I couldn't process your request."}
-'''
-
-# Save to a deployable main.py file
-safe_path = Path("/mnt/data/main_safe.py")
-safe_path.write_text(safe_main_py.strip())
-safe_path
