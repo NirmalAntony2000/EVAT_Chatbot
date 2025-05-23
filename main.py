@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
 import re
+import re
 
 app = FastAPI()
 app.add_middleware(
@@ -321,3 +322,4 @@ Would you like to see nearby cafés, restrooms, or convenience stores?"
         return {"fulfillmentText": text}
 
     return {"fulfillmentText": "Sorry, I couldn't process your request."}
+
