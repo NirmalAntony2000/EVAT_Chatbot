@@ -1,30 +1,32 @@
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-import re
+
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # or restrict to your frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 GOOGLE_API_KEY = "AIzaSyBttID79kCG9XQP1MO-7a1OOqG-PfpqBiY"
 OCM_API_KEY = "d0fee2b1-2fa3-4725-ba42-d8073437d320"
 
-def normalize(text):
-    return re.sub(r'[^a-z0-9]', '', text.lower())
 
 def get_coordinates(city):
+    # Append ", Victoria" to bias all searches to Victoria, AU
     city = f"{city.strip()}, Victoria"
     url = f"https://maps.googleapis.com/maps/api/geocode/json?address={city}&region=AU&key={GOOGLE_API_KEY}"
     response = requests.get(url).json()
+
     if response.get('status') == 'OK' and response.get('results'):
         loc = response['results'][0]['geometry']['location']
         return loc['lat'], loc['lng']
+
     return None, None
 
 def get_chargers(lat, lon):
@@ -69,13 +71,12 @@ async def webhook(request: Request):
         suggestions = []
         context_data = []
         for c in chargers:
-            addr = c.get("AddressInfo", {})
-            label = f"{addr.get('Title', '')} – {addr.get('AddressLine1', '')}".strip()
+            label = f"{c['AddressInfo']['Title']} – {c['AddressInfo'].get('AddressLine1', 'Unknown')}"
             suggestions.append(label)
             context_data.append({
                 "label": label,
-                "lat": addr.get("Latitude"),
-                "lon": addr.get("Longitude")
+                "lat": c['AddressInfo']['Latitude'],
+                "lon": c['AddressInfo']['Longitude']
             })
 
         return {
@@ -97,49 +98,16 @@ async def webhook(request: Request):
 
     elif intent == "SelectCharger":
         user_input = data['queryResult']['queryText'].strip()
-        user_input_norm = normalize(user_input)
-
         context = next((ctx for ctx in data['queryResult']['outputContexts']
                         if 'awaiting_selection' in ctx['name']), {})
         charger_list = context.get("parameters", {}).get("chargers", [])
-
-        selected = next((c for c in charger_list if normalize(c.get("label", "")) == user_input_norm), None)
+        selected = next((c for c in charger_list if c["label"].lower() == user_input.lower()), None)
 
         if not selected:
-            return {"fulfillmentText": f"Sorry, I couldn’t find a charger matching '{user_input}'."}
-
-        lat = selected.get("lat")
-        lon = selected.get("lon")
-        label = selected.get("label", "Selected Charger")
-
-        if not lat or not lon:
-            return {"fulfillmentText": "Sorry, the selected charger's location is incomplete."}
-
-        try:
-            chargers = get_chargers(lat, lon)
-            other_chargers = []
-            for c in chargers:
-                addr = c.get("AddressInfo", {})
-                title = addr.get("Title", "")
-                line1 = addr.get("AddressLine1", "")
-                full_label = f"{title} – {line1}".strip()
-                if normalize(full_label) != normalize(label):
-                    other_chargers.append(full_label)
-        except Exception:
-            other_chargers = []
-
-        lines = [f"You selected: {label}."]
-        if other_chargers:
-            lines.append("Nearby chargers:")
-            lines.extend(f"- {oc}" for oc in other_chargers[:3])
-        else:
-            lines.append("No other chargers were found nearby.")
-        lines.append("")
-        lines.append("Would you like to see nearby cafés, restrooms, or convenience stores?")
-        message = "\n".join(lines)
+            return {"fulfillmentText": "Sorry, that charger wasn't recognized."}
 
         return {
-            "fulfillmentText": message,
+            "fulfillmentText": "What would you like to see nearby? Cafés, restrooms, or convenience stores?",
             "fulfillmentMessages": [{
                 "quickReplies": {
                     "title": "Choose a place type:",
@@ -162,7 +130,7 @@ async def webhook(request: Request):
         selected = context.get("parameters", {}).get("selected", {})
         lat = selected.get("lat")
         lon = selected.get("lon")
-        label = selected.get("label", "Selected Charger")
+        label = selected.get("label")
 
         if not lat or not lon:
             return {"fulfillmentText": "Sorry, something went wrong with the location."}
