@@ -1,7 +1,9 @@
+from pathlib import Path
+
+safe_main_py = '''
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-import re
 import re
 
 app = FastAPI()
@@ -15,6 +17,9 @@ app.add_middleware(
 
 GOOGLE_API_KEY = "AIzaSyBttID79kCG9XQP1MO-7a1OOqG-PfpqBiY"
 OCM_API_KEY = "d0fee2b1-2fa3-4725-ba42-d8073437d320"
+
+def normalize(text):
+    return re.sub(r'[^a-z0-9]', '', text.lower())
 
 def get_coordinates(city):
     city = f"{city.strip()}, Victoria"
@@ -48,9 +53,6 @@ def get_nearby_places(lat, lon, place_type="cafe"):
     }
     return requests.get(url, params=params).json().get("results", [])[:3]
 
-def normalize(text):
-    return re.sub(r'[^a-z0-9]', '', text.lower())
-
 @app.post("/webhook")
 async def webhook(request: Request):
     data = await request.json()
@@ -70,12 +72,13 @@ async def webhook(request: Request):
         suggestions = []
         context_data = []
         for c in chargers:
-            label = f"{c['AddressInfo']['Title']} – {c['AddressInfo'].get('AddressLine1', 'Unknown')}"
+            addr = c.get("AddressInfo", {})
+            label = f"{addr.get('Title', '')} – {addr.get('AddressLine1', '')}".strip()
             suggestions.append(label)
             context_data.append({
                 "label": label,
-                "lat": c['AddressInfo']['Latitude'],
-                "lon": c['AddressInfo']['Longitude']
+                "lat": addr.get("Latitude"),
+                "lon": addr.get("Longitude")
             })
 
         return {
@@ -96,22 +99,14 @@ async def webhook(request: Request):
         }
 
     elif intent == "SelectCharger":
-        import re
-
-        def normalize(text):
-            return re.sub(r'[^a-z0-9]', '', text.lower())
-
         user_input = data['queryResult']['queryText'].strip()
-        user_input_normalized = normalize(user_input)
+        user_input_norm = normalize(user_input)
 
         context = next((ctx for ctx in data['queryResult']['outputContexts']
                         if 'awaiting_selection' in ctx['name']), {})
         charger_list = context.get("parameters", {}).get("chargers", [])
 
-        selected = next(
-            (c for c in charger_list if normalize(c.get("label", "")) == user_input_normalized),
-            None
-        )
+        selected = next((c for c in charger_list if normalize(c.get("label", "")) == user_input_norm), None)
 
         if not selected:
             return {"fulfillmentText": f"Sorry, I couldn’t find a charger matching '{user_input}'."}
@@ -136,18 +131,15 @@ async def webhook(request: Request):
         except Exception:
             other_chargers = []
 
-        message = f"You selected: {label}.
-"
+        lines = [f"You selected: {label}."]
         if other_chargers:
-            message += "Nearby chargers:
-" + "
-".join(f"- {oc}" for oc in other_chargers[:3])
+            lines.append("Nearby chargers:")
+            lines.extend(f"- {oc}" for oc in other_chargers[:3])
         else:
-            message += "No other chargers were found nearby."
-
-        message += "
-
-Would you like to see nearby cafés, restrooms, or convenience stores?"
+            lines.append("No other chargers were found nearby.")
+        lines.append("")
+        lines.append("Would you like to see nearby cafés, restrooms, or convenience stores?")
+        message = "\\n".join(lines)
 
         return {
             "fulfillmentText": message,
@@ -165,138 +157,15 @@ Would you like to see nearby cafés, restrooms, or convenience stores?"
                 }
             }]
         }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
-
-        lat = selected.get("lat")
-        lon = selected.get("lon")
-        label = selected.get("label")
-
-        nearby_chargers = get_chargers(lat, lon)
-        other_chargers = []
-        for c in nearby_chargers:
-            address_info = c.get("AddressInfo", {})
-            title = address_info.get("Title", "Unknown Charger")
-            line1 = address_info.get("AddressLine1", "Unknown Location")
-            charger_label = f"{title} – {line1}"
-
-            if normalize(charger_label) != normalize(label):
-                other_chargers.append(charger_label)
-
-        response_text = f"You selected: {label}.
-Here are other chargers nearby:
-"
-        for other in other_chargers[:3]:
-            response_text += f"- {other}
-"
-
-        response_text += "
-Would you like to see nearby cafés, restrooms, or convenience stores?"
-
-        return {
-            "fulfillmentText": response_text,
-            "fulfillmentMessages": [{
-                "quickReplies": {
-                    "title": "Choose a place type:",
-                    "quickReplies": ["cafes", "restrooms", "convenience stores"]
-                }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
-
-        lat = selected.get("lat")
-        lon = selected.get("lon")
-        label = selected.get("label")
-
-        nearby_chargers = get_chargers(lat, lon)
-        other_chargers = []
-        for c in nearby_chargers:
-            charger_label = f"{c['AddressInfo']['Title']} – {c['AddressInfo'].get('AddressLine1', 'Unknown')}"
-            if normalize(charger_label) != normalize(label):
-                other_chargers.append(charger_label)
-
-        response_text = f"You selected: {label}.
-Here are other chargers nearby:
-"
-        for other in other_chargers[:3]:
-            response_text += f"- {other}
-"
-
-        response_text += "
-Would you like to see nearby cafés, restrooms, or convenience stores?"
-
-        return {
-            "fulfillmentText": response_text,
-            "fulfillmentMessages": [{
-                "quickReplies": {
-                    "title": "Choose a place type:",
-                    "quickReplies": ["cafes", "restrooms", "convenience stores"]
-                }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }"fulfillmentText": f"Sorry, the charger '{user_input}' wasn't recognized. Please try again."}
-
-        return {
-            "fulfillmentText": "What would you like to see nearby? Cafés, restrooms, or convenience stores?",
-            "fulfillmentMessages": [{
-                "quickReplies": {
-                    "title": "Choose a place type:",
-                    "quickReplies": ["cafes", "restrooms", "convenience stores"]
-                }
-            }],
-            "outputContexts": [{
-                "name": f"{data['session']}/contexts/awaiting_amenity_type",
-                "lifespanCount": 5,
-                "parameters": {
-                    "selected": selected
-                }
-            }]
-        }
 
     elif intent == "SelectAmenityType":
         amenity = params.get("amenity_type", "").strip()
-        context = next((ctx for ctx in data['queryResult']['outputContexts'] if 'awaiting_amenity_type' in ctx['name']), {})
+        context = next((ctx for ctx in data['queryResult']['outputContexts']
+                        if 'awaiting_amenity_type' in ctx['name']), {})
         selected = context.get("parameters", {}).get("selected", {})
         lat = selected.get("lat")
         lon = selected.get("lon")
-        label = selected.get("label")
+        label = selected.get("label", "Selected Charger")
 
         if not lat or not lon:
             return {"fulfillmentText": "Sorry, something went wrong with the location."}
@@ -322,3 +191,9 @@ Would you like to see nearby cafés, restrooms, or convenience stores?"
         return {"fulfillmentText": text}
 
     return {"fulfillmentText": "Sorry, I couldn't process your request."}
+'''
+
+# Save to a deployable main.py file
+safe_path = Path("/mnt/data/main_safe.py")
+safe_path.write_text(safe_main_py.strip())
+safe_path
